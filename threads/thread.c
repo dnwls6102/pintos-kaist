@@ -28,6 +28,12 @@
    that are ready to run but not actually running. */
 static struct list ready_list;
 
+//현재 sleep중인 프로세스/스레드들이 들어있는 연결 리스트 sleep_list
+static struct list sleep_list;
+
+//다음으로 깨워야 할 thread가 깨어나야 할 시간을 저장하는 변수 next_wake_up_tick
+static int64_t next_wake_up_tick;
+
 /* Idle thread. */
 static struct thread *idle_thread;
 
@@ -108,7 +114,10 @@ thread_init (void) {
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
+	list_init (&sleep_list);
 	list_init (&destruction_req);
+
+	next_wake_up_tick = INT64_MAX;
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();
@@ -245,6 +254,31 @@ thread_unblock (struct thread *t) {
 	intr_set_level (old_level);
 }
 
+/* 비교 함수 구현 */
+bool wake_up_tick_less(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    struct thread *t_a = list_entry(a, struct thread, elem);
+    struct thread *t_b = list_entry(b, struct thread, elem);
+    return t_a->wakeup_tick < t_b->wakeup_tick;
+}
+
+void thread_wakeup(int64_t current_tick)
+{	
+	//sleep_list가 비어있다면 깨울 스레드가 없다는 의미 -> 바로 return
+	if (list_empty(&sleep_list))
+		return;
+	
+	//만약 현재 시간이 next_wake_up_tick과 같거나 지났을 경우
+	while (current_tick >= next_wake_up_tick)
+	{
+		struct list_elem * thread_to_wake = list_pop_front(&sleep_list);
+		list_push_back(&ready_list, thread_to_wake);
+
+		struct thread * temp = list_entry(&(sleep_list.head), struct thread, elem);
+		next_wake_up_tick = temp->wakeup_tick;
+	}
+	
+}
+
 /* Returns the name of the running thread. */
 const char *
 thread_name (void) {
@@ -306,6 +340,40 @@ thread_yield (void) {
 		list_push_back (&ready_list, &curr->elem);
 	do_schedule (THREAD_READY);
 	intr_set_level (old_level);
+}
+
+void peek_sleep_list(void)
+{
+	return list_empty(&sleep_list);
+}
+
+//thread를 sleep시키는 함수 thread_sleep(int64_t tick)
+void thread_sleep(int64_t tick)
+{
+	struct thread * curThread = thread_current(); //현재 스레드 받아오기
+	enum intr_level old_level = intr_disable(); //인터럽트 비활성화
+
+	ASSERT(curThread != idle_thread); //현재 스레드가 idle 스레드인지 확인 : idle 스레드면 kill
+
+	curThread -> status = THREAD_BLOCKED; //스레드의 상태를 BLOCKED로 바꾸기
+	curThread -> wakeup_tick = tick; //현재 스레드의 wakeup_tick 값을 매개변수로 받아온 값으로 설정하기
+
+	if (list_empty(&sleep_list) || tick < next_wake_up_tick) //만약 리스트가 비어있거나, 가장 빠르게 깨워야 하는 시간보다 더 빠를 경우
+		next_wake_up_tick = tick; //global tick 업데이트
+	
+	list_insert_ordered(&sleep_list, &curThread -> elem, wake_up_tick_less, NULL); //슬립 리스트에 현재 스레드를 넣기 : wake_up_tick 기준으로 오름차순
+
+	schedule(); //다른 작업 스케줄 : 현재 스레드 다음으로, 즉 ready_list의 head에 있는 스레드를 schedule함
+
+	intr_set_level(old_level); //인터럽트 활성화
+	/*
+	현재 스레드가 idle thread가 아니라면
+	호출한 스레드의 상태를 BLOCKED로 바꾸고
+	매개 변수로 받아온 tick을 wakeup_tick값으로 설정하고
+	필요 시 global tick도 업데이트 해주고(=sleep_list에 어떠한 스레드도 없었을 경우)
+	다른 스레드를 schedule()
+	스레드 리스트(ready_list / sleep_list)를 조정할 때에는 인터럽트를 비활성화하기
+	*/
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
@@ -409,6 +477,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
+	t->wakeup_tick = 0; //wakeup_tick 초기화
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should

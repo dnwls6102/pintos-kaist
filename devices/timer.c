@@ -90,11 +90,15 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void
 timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+	int64_t start = timer_ticks (); //이 구문이 실행된 이후 타이머 인터럽트가 발생해 다른 스레드로 전환이 된다면? 정확한 값을 얻을 수 있을까?
 
 	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+	// while (timer_elapsed (start) < ticks)
+	// 	thread_yield ();
+
+	//지정된 시간(= 매개변수로 넘겨받은 시간 tick)동안
+	if (timer_elapsed(start) < ticks)
+		thread_sleep(start + ticks); //thread를 재우기 : start(timer_sleep에 처음 돌입한 "시각") + ticks(잠 잘 시간)
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -126,6 +130,14 @@ static void
 timer_interrupt (struct intr_frame *args UNUSED) {
 	ticks++;
 	thread_tick ();
+
+	/*
+	sleep list와 global tick을 체크해
+	깨울 thread가 있는지 살펴보고
+	있다면 그 threads들을 ready list로 옮겨준다
+	그리고 global tick을 업데이트해준다(sleep list의 HEAD의 tick 값으로)
+	*/
+	thread_wakeup(timer_ticks());
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
