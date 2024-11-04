@@ -92,6 +92,9 @@ struct thread {
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
 
+    /* sleep_list와 관련된 멤버 */
+    int64_t wakeup_tick;                /* 스레드가 깨어날 tick 값 */
+
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 

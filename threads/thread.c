@@ -24,6 +24,10 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
+
+/* Sleep 상태인 스레드를 저장하는 리스트 */
+struct list sleep_list;  // sleep_list 선언
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
@@ -109,6 +113,7 @@ thread_init (void) {
 	lock_init (&tid_lock);
 	list_init (&ready_list);
 	list_init (&destruction_req);
+	list_init(&sleep_list); // sleep_list 초기화
 
 	/* Set up a thread structure for the running thread. */
 	initial_thread = running_thread ();

@@ -17,6 +17,10 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+
+extern struct list sleep_list;  // sleep_list를 외부에서 참조
+
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -28,6 +32,14 @@ static intr_handler_func timer_interrupt;
 static bool too_many_loops (unsigned loops);
 static void busy_wait (int64_t loops);
 static void real_time_sleep (int64_t num, int32_t denom);
+
+/* 두 스레드의 wakeup_tick 값을 비교하여 sleep_list에 정렬되도록 하는 함수 */
+static bool compare_wakeup_tick(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    const struct thread *t_a = list_entry(a, struct thread, elem);
+    const struct thread *t_b = list_entry(b, struct thread, elem);
+    return t_a->wakeup_tick < t_b->wakeup_tick;
+}
+
 
 /* Sets up the 8254 Programmable Interval Timer (PIT) to
    interrupt PIT_FREQ times per second, and registers the
@@ -87,15 +99,34 @@ timer_elapsed (int64_t then) {
 	return timer_ticks () - then;
 }
 
-/* Suspends execution for approximately TICKS timer ticks. */
-void
-timer_sleep (int64_t ticks) {
-	int64_t start = timer_ticks ();
+// /* Suspends execution for approximately TICKS timer ticks. */
+// void
+// timer_sleep (int64_t ticks) {
+// 	int64_t start = timer_ticks ();
 
-	ASSERT (intr_get_level () == INTR_ON);
-	while (timer_elapsed (start) < ticks)
-		thread_yield ();
+// 	ASSERT (intr_get_level () == INTR_ON);
+// 	while (timer_elapsed (start) < ticks)
+// 		thread_yield ();
+// }
+
+
+/* 스레드를 지정된 tick 동안 재우는 함수 */
+void timer_sleep(int64_t ticks) {
+    if (ticks <= 0) return;  // 대기 시간이 0 이하일 경우 리턴
+
+    // 현재 tick 값에 대기 시간을 더해 스레드의 깨어날 시간을 계산
+    int64_t wakeup_tick = timer_ticks() + ticks;
+    struct thread *cur = thread_current();  // 현재 실행 중인 스레드를 가져옴
+    cur->wakeup_tick = wakeup_tick;  // 스레드의 깨어날 시간 설정
+
+    // 인터럽트를 비활성화하고, sleep_list에 스레드를 정렬된 상태로 추가
+    enum intr_level old_level = intr_disable();
+    list_insert_ordered(&sleep_list, &cur->elem, compare_wakeup_tick, NULL);
+    thread_block();  // 스레드를 blocked 상태로 전환하여 대기하게 함
+    intr_set_level(old_level);  // 이전 인터럽트 상태로 복원
 }
+
+
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -120,12 +151,21 @@ void
 timer_print_stats (void) {
 	printf ("Timer: %"PRId64" ticks\n", timer_ticks ());
 }
-
-/* Timer interrupt handler. */
-static void
-timer_interrupt (struct intr_frame *args UNUSED) {
-	ticks++;
-	thread_tick ();
+
+
+/* 타이머 인터럽트 핸들러 */
+static void timer_interrupt(struct intr_frame *args UNUSED) {
+    ticks++;           // 전체 tick 값 증가
+    thread_tick();     // 스레드 tick 처리
+
+    // sleep_list에 있는 스레드 중 깨어날 시간이 된 스레드를 ready_list로 이동
+    while (!list_empty(&sleep_list)) {
+        struct thread *t = list_entry(list_front(&sleep_list), struct thread, elem);
+        if (t->wakeup_tick > ticks) break;  // 깨어날 시간이 아직 안 된 스레드는 검사 중단
+
+        list_pop_front(&sleep_list);  // 깨어날 시간이 된 스레드를 sleep_list에서 제거
+        thread_unblock(t);            // 스레드를 ready 상태로 전환하여 실행 가능하게 만듦
+    }
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
