@@ -95,10 +95,12 @@ timer_sleep (int64_t ticks) {
 	ASSERT (intr_get_level () == INTR_ON);
 	// while (timer_elapsed (start) < ticks)
 	// 	thread_yield ();
+	enum intr_level old_level = intr_disable();
 
-	//지정된 시간(= 매개변수로 넘겨받은 시간 tick)동안
-	if (timer_elapsed(start) < ticks)
-		thread_sleep(start + ticks); //thread를 재우기 : start(timer_sleep에 처음 돌입한 "시각") + ticks(잠 잘 시간)
+	// //지정된 시간(= 매개변수로 넘겨받은 시간 tick)동안
+	// if (timer_elapsed(start) < ticks)
+	thread_sleep(start + ticks); //thread를 재우기 : start(timer_sleep에 처음 돌입한 "시각") + ticks(잠 잘 시간)
+	intr_set_level(old_level);
 }
 
 /* Suspends execution for approximately MS milliseconds. */
@@ -137,7 +139,7 @@ timer_interrupt (struct intr_frame *args UNUSED) {
 	있다면 그 threads들을 ready list로 옮겨준다
 	그리고 global tick을 업데이트해준다(sleep list의 HEAD의 tick 값으로)
 	*/
-	thread_wakeup(timer_ticks());
+	thread_wakeup(ticks);
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer

@@ -14,6 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+// #define TEST
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -261,21 +262,66 @@ bool wake_up_tick_less(const struct list_elem *a, const struct list_elem *b, voi
     return t_a->wakeup_tick < t_b->wakeup_tick;
 }
 
+bool prove(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
+{
+	return 0;
+}
+
 void thread_wakeup(int64_t current_tick)
 {	
-	//sleep_list가 비어있다면 깨울 스레드가 없다는 의미 -> 바로 return
+	#ifndef TEST
+	//sleep_list가 비어있다면 깨울 스레드가 없다는 의미
 	if (list_empty(&sleep_list))
-		return;
-	
-	//만약 현재 시간이 next_wake_up_tick과 같거나 지났을 경우
-	while (current_tick >= next_wake_up_tick)
 	{
-		struct list_elem * thread_to_wake = list_pop_front(&sleep_list);
-		list_push_back(&ready_list, thread_to_wake);
-
-		struct thread * temp = list_entry(&(sleep_list.head), struct thread, elem);
-		next_wake_up_tick = temp->wakeup_tick;
+		//스레드들이 왔다 간 것일수도 있으니 next_wake_up_tick을 INT64_MAX로 초기화
+		next_wake_up_tick = INT64_MAX;
+		return;
 	}
+	//만약 현재 시간이 next_wake_up_tick과 같거나 지났을 경우
+	while (!list_empty(&sleep_list))
+	{
+		//현재 (정렬된) sleep list에서 맨 앞 원소 가져오기
+		struct list_elem * peeked_elem = list_front(&sleep_list);
+		//맨 앞 원소를 토대로 원본 thread 구조체 복원하기
+		struct thread *thread_to_wake = list_entry(peeked_elem, struct thread, elem);
+		//가장 먼저 깨워야할 쓰레드의 wakeup_tick이 현재 시간보다 같거나 작으면
+		if (current_tick >= thread_to_wake -> wakeup_tick)
+		{
+			//sleep_list의 맨 앞 원소를 pop
+			list_pop_front(&sleep_list);
+			//복원한 thread를 unblock하기
+			thread_unblock(thread_to_wake);
+		}
+		//아직 깨울 시간이 아니라면
+		else
+		{
+			next_wake_up_tick = thread_to_wake -> wakeup_tick;
+			break;
+		}
+	}
+
+	#endif
+	#ifdef TEST
+	struct list_elem *e;
+
+    /* global_tick 초기화 */
+    next_wake_up_tick = INT64_MAX;
+
+    /* 슬립 리스트에서 깨워야 할 스레드를 확인 */
+    while (!list_empty(&sleep_list)) {
+        e = list_front(&sleep_list);
+        struct thread *t = list_entry(e, struct thread, elem);
+        if (t->wakeup_tick <= current_tick) {
+            /* 깨울 시간이라면 스레드를 깨움 */
+            list_pop_front(&sleep_list);
+            thread_unblock(t);
+        } else {
+            /* 슬립 리스트가 정렬되어 있으므로 더 이상 확인할 필요가 없음*/
+            next_wake_up_tick = t->wakeup_tick;
+            break;
+        }
+    }
+	#endif
 	
 }
 
@@ -355,15 +401,15 @@ void thread_sleep(int64_t tick)
 
 	ASSERT(curThread != idle_thread); //현재 스레드가 idle 스레드인지 확인 : idle 스레드면 kill
 
-	curThread -> status = THREAD_BLOCKED; //스레드의 상태를 BLOCKED로 바꾸기
+	//curThread -> status = THREAD_BLOCKED; //스레드의 상태를 BLOCKED로 바꾸기
 	curThread -> wakeup_tick = tick; //현재 스레드의 wakeup_tick 값을 매개변수로 받아온 값으로 설정하기
+
+	list_insert_ordered(&sleep_list, &curThread -> elem, prove, NULL); //슬립 리스트에 현재 스레드를 넣기 : wake_up_tick 기준으로 오름차순
 
 	if (list_empty(&sleep_list) || tick < next_wake_up_tick) //만약 리스트가 비어있거나, 가장 빠르게 깨워야 하는 시간보다 더 빠를 경우
 		next_wake_up_tick = tick; //global tick 업데이트
-	
-	list_insert_ordered(&sleep_list, &curThread -> elem, wake_up_tick_less, NULL); //슬립 리스트에 현재 스레드를 넣기 : wake_up_tick 기준으로 오름차순
-
-	schedule(); //다른 작업 스케줄 : 현재 스레드 다음으로, 즉 ready_list의 head에 있는 스레드를 schedule함
+		
+	thread_block(); //스레드의 상태를 BLOCKED로 바꾸기 : thread_block에서 스케줄도 해줌
 
 	intr_set_level(old_level); //인터럽트 활성화
 	/*
