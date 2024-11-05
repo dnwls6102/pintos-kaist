@@ -98,8 +98,8 @@ timer_sleep (int64_t ticks) {
 	enum intr_level old_level = intr_disable();
 
 	// //지정된 시간(= 매개변수로 넘겨받은 시간 tick)동안
-	// if (timer_elapsed(start) < ticks)
-	thread_sleep(start + ticks); //thread를 재우기 : start(timer_sleep에 처음 돌입한 "시각") + ticks(잠 잘 시간)
+	if (timer_elapsed(start) < ticks)
+		thread_sleep(start + ticks); //thread를 재우기 : start(timer_sleep에 처음 돌입한 "시각") + ticks(잠 잘 시간)
 	intr_set_level(old_level);
 }
 

@@ -392,7 +392,7 @@ void peek_sleep_list(void)
 void thread_sleep(int64_t tick)
 {
 	struct thread * curThread = thread_current(); //현재 스레드 받아오기
-	enum intr_level old_level = intr_disable(); //인터럽트 비활성화
+	//enum intr_level old_level = intr_disable(); //인터럽트 비활성화
 
 	ASSERT(curThread != idle_thread); //현재 스레드가 idle 스레드인지 확인 : idle 스레드면 kill
 
@@ -406,7 +406,7 @@ void thread_sleep(int64_t tick)
 		
 	thread_block(); //스레드의 상태를 BLOCKED로 바꾸기 : thread_block에서 스케줄도 해줌
 
-	intr_set_level(old_level); //인터럽트 활성화
+	//intr_set_level(old_level); //인터럽트 활성화
 	/*
 	현재 스레드가 idle thread가 아니라면
 	호출한 스레드의 상태를 BLOCKED로 바꾸고
