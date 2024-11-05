@@ -66,7 +66,8 @@ sema_down (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	while (sema->value == 0) {
-		list_push_back (&sema->waiters, &thread_current ()->elem);
+		//우선 순위가 가장 높은 스레드가 sema의 wait_list의 가장 앞쪽에 위치하게끔 넣기
+		list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_more, NULL);
 		thread_block ();
 	}
 	sema->value--;
@@ -113,6 +114,8 @@ sema_up (struct semaphore *sema) {
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
 	sema->value++;
+	//waiters에서 원소를 빼준 후 다시 sort -> 굳이 필요하나?
+	list_sort(&sema->waiters, priority_more, NULL);
 	intr_set_level (old_level);
 }
 
@@ -282,7 +285,8 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	sema_init (&waiter.semaphore, 0);
-	list_push_back (&cond->waiters, &waiter.elem);
+	//condition variable의 wait_list의 맨 앞에 우선순위가 가장 높은 스레드가 들어가게끔
+	list_insert_ordered (&cond->waiters, &waiter.elem, priority_more, NULL);
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
@@ -305,6 +309,8 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	if (!list_empty (&cond->waiters))
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
+	//cond_signal에 sort를 추가
+	list_sort(&cond->waiters, priority_more, NULL);
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
