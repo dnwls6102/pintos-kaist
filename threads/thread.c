@@ -262,11 +262,6 @@ bool wake_up_tick_less(const struct list_elem *a, const struct list_elem *b, voi
     return t_a->wakeup_tick < t_b->wakeup_tick;
 }
 
-bool prove(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED)
-{
-	return 0;
-}
-
 void thread_wakeup(int64_t current_tick)
 {	
 	#ifndef TEST
@@ -404,7 +399,7 @@ void thread_sleep(int64_t tick)
 	//curThread -> status = THREAD_BLOCKED; //스레드의 상태를 BLOCKED로 바꾸기
 	curThread -> wakeup_tick = tick; //현재 스레드의 wakeup_tick 값을 매개변수로 받아온 값으로 설정하기
 
-	list_insert_ordered(&sleep_list, &curThread -> elem, prove, NULL); //슬립 리스트에 현재 스레드를 넣기 : wake_up_tick 기준으로 오름차순
+	list_insert_ordered(&sleep_list, &curThread -> elem, wake_up_tick_less, NULL); //슬립 리스트에 현재 스레드를 넣기 : wake_up_tick 기준으로 오름차순
 
 	if (list_empty(&sleep_list) || tick < next_wake_up_tick) //만약 리스트가 비어있거나, 가장 빠르게 깨워야 하는 시간보다 더 빠를 경우
 		next_wake_up_tick = tick; //global tick 업데이트
@@ -523,7 +518,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
-	t->wakeup_tick = 0; //wakeup_tick 초기화
+	//t->wakeup_tick = 0; //wakeup_tick 초기화
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
