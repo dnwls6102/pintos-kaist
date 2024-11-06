@@ -65,9 +65,11 @@ sema_down (struct semaphore *sema) {
 	ASSERT (!intr_context ());
 
 	old_level = intr_disable ();
+	//만약 세마포어 값이 0이라면
 	while (sema->value == 0) {
-		//우선 순위가 가장 높은 스레드가 sema의 wait_list의 가장 앞쪽에 위치하게끔 넣기
+		//현재 락(세마포어)의 waiters에 현재 스레드 삽입
 		list_insert_ordered (&sema->waiters, &thread_current ()->elem, priority_more, NULL);
+		//현재 스레드의 상태를 BLOCKED로 설정
 		thread_block ();
 	}
 	sema->value--;
@@ -111,11 +113,13 @@ sema_up (struct semaphore *sema) {
 
 	old_level = intr_disable ();
 	if (!list_empty (&sema->waiters))
+	{
+		//waiters에서 원소를 빼주기 전에 sort : 우선순위 전이가 일어났을수도
+		list_sort(&sema->waiters, priority_more, NULL);
 		thread_unblock (list_entry (list_pop_front (&sema->waiters),
 					struct thread, elem));
+	}
 	sema->value++;
-	//waiters에서 원소를 빼준 후 다시 sort -> 굳이 필요하나?
-	list_sort(&sema->waiters, priority_more, NULL);
 	intr_set_level (old_level);
 }
 
@@ -191,8 +195,56 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	struct thread * current_t = thread_current();
+	//만약 세마포어 값이 0이하(사실 여기서는 단순히 락을 위한 이진 세마포어로 사용되기 때문에 0 아래로 내려갈 일은 없긴 함)
+	if (lock -> semaphore.value <= 0)
+	{
+		
+		//현재 스레드의 wait_on_lock을 현재 요구한 lock으로 설정
+		current_t -> wait_on_lock = lock;
+		/*
+		현재 스레드의 상태를 BLOCK으로 설정하고
+		락(세마포어)의 waiters 리스트에 현재 스레드를 삽입하는 코드는
+		sema_down에 구현되어 있음
+		*/
+		//현재 스레드의 original_priority에 기존 우선순위 저장
+		//lock_acquire를 실행하여 두 개 이상의 락을 보유하는 상황이면
+		//원본 original priority가 지워지진 않을지?
+		//이를 방지하기 위해 original_priority의 기본값을 -1로 설정시키고
+		//-1인 경우에만 original_priority를 저장시키기
+		if (current_t -> original_priority == -1)
+			current_t -> original_priority = current_t -> priority;
+		//현재 lock을 보유하고 있는 스레드보다 우선순위가 높다면 : 일단 기부
+		if (lock->holder->priority < current_t -> priority)
+		{
+			lock->holder->priority = current_t -> priority;
+			//lock 소유자 스레드의 donations 리스트에 현재 스레드 추가
+			list_insert_ordered(&(lock->holder->donations), &(current_t -> elem), priority_more, NULL);
+		}
+		/*
+		sema->waiters가 우선순위에 대한 내림차순으로 정렬이 되어있는데
+		굳이 우선순위 전이를 시키고 donation 리스트에 넣는 이유
+		현재 락을 소유한 스레드가 실행중인 스레드라면 사실 전혀 상관이 없다
+		그렇다면 waiters의 head에 위치한 스레드에게 락을 넘겨주고
+		해당 스레드를 ready_list로 옮겨주면(lock_release)
+		문제 없이 우선순위대로 실행이 된다
+
+		하지만 만약 락을 소유중인 스레드가 실행중인 스레드가 아니고
+		ready_list에 락을 소유중인 스레드보다는 우선순위가 높지만
+		waiters의 head에 위치한 스레드의 우선순위보다는 낮은 스레드들이 앞서 있다면
+		그 스레드들보다 waiters의 head에 위치한 스레드를 먼저 실행시켜야 한다
+
+		락을 넘겨줬다는 것은 곧 임계 영역에 대한 작업이 모두 완료되었다는 것이기에
+		만약 donations에 해당 영역에 대하여 락을 요청한 스레드들이 남아있다면
+		모두 삭제해줘야 한다
+
+		락을 요청했지만, 해당 영역에 대한 락을 요청한 것은 아니라면
+		우선순위 기부를 다시 받고 넘어가야 한다
+		*/
+
+	}
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	lock->holder = current_t;
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -307,10 +359,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 	ASSERT (lock_held_by_current_thread (lock));
 
 	if (!list_empty (&cond->waiters))
+	{
+		//cond_signal에 sort를 추가 : 우선순위 전이가 일어났을수도 있으니까
+		list_sort(&cond->waiters, priority_more, NULL);
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
-	//cond_signal에 sort를 추가
-	list_sort(&cond->waiters, priority_more, NULL);
+	}
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by

@@ -70,6 +70,8 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
+static void preemption();
+
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
 
@@ -231,6 +233,9 @@ thread_create (const char *name, int priority,
 
 	/* Add to run queue. */
 	thread_unblock (t);
+
+	//새로 만든 스레드의 우선순위가 현재 스레드의 우선순위보다 높다면...
+	preemption();
 
 	return tid;
 }
@@ -427,10 +432,38 @@ void thread_sleep(int64_t tick)
 }
 
 /* Sets the current thread's priority to NEW_PRIORITY. */
+/*
+우선순위 기부를 고려한 thread_set_priority
+
+새로 설정한 우선순위가 donation의 우선순위보다 낮으면 새로 업데이트해야...
+
+만약 이 함수가 호출된 시점에서 현재 스레드가
+donation에 남아있는 스레드가 있고
+new_priority보다 donation의 head(즉, 가장 우선순위가 큰) 스레드의 우선순위가 더 크면
+new_priority로 설정하면 안되고, donation의 head로 우선순위를 설정해야 한다
+
+그리고 조정한 우선순위가 만약 ready_list의 head보다 낮다면
+선점이 일어나야 한다
+*/
 void
 thread_set_priority (int new_priority) {
-	thread_current ()->priority = new_priority;
-	list_sort(&ready_list, priority_more, NULL);//우선 순위를 변경한 후 ready_list의 순서를 재조정
+	struct thread *current_t = thread_current();
+
+	//현재 스레드의 donations에 스레드가 남아있다면
+	if (!list_empty(&current_t->donations))
+	{
+		//현재 스레드에 우선순위를 기부받을(경쟁 조건에 의해 )
+		struct thread *donation_top = list_entry(list_front(&current_t->donations), struct thread, elem);
+		//만약 donation_top의 우선순위가 새로 부여받을 우선순위보다 높다면
+		if (donation_top -> priority > new_priority)
+			new_priority = donation_top -> priority; //donation_top의 우선순위로 현재 스레드의 우선순위를 변경
+	}
+
+	//현재 스레드의 우선순위를 변경
+	current_t -> priority = new_priority;
+
+	//선점 검사
+	preemption();
 }
 
 /* Returns the current thread's priority. */
@@ -529,6 +562,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->priority = priority;
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = 0; //wakeup_tick 초기화
+	list_init(&(t -> donations));//우선순위 기부자들이 들어간 리스트 donations 초기화
+	lock_init(t -> wait_on_lock);//내가 어떤 (임계 영역에 대한)락을 기다리고 있는지를 저장하는 lock 포인터 wait_on_lock 초기화
+	t->original_priority = -1; //우선순위 기부를 받을 때, 복구할 원본 우선순위를 저장할 변수 original_priority
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -707,4 +743,27 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+//선점 함수 preemption()
+/*
+현재 스레드의 우선순위가 변경되었을 때,
+혹은 새로운 스레드를 생성했을 때
+현재 실행되어야 할 스레드가 변경되어야 할 수 있다
+*/
+static void
+preemption()
+{	
+	//ready list에서 가장 우선순위가 빠른 원소를 참조해
+	//원본 구조체 복원
+	if (!list_empty(&ready_list))
+	{
+		struct thread * ready_first_t = list_front(&ready_list);
+		//만약 현재 실행되는 쓰레드의 우선순위보다 
+		//ready list에서 가장 먼저 실행되어야 할 스레드의 우선순위가 더 높다면
+		if (thread_current() -> priority < ready_first_t -> priority)
+		{
+			thread_yield(); //현재 스레드를 양보시키기
+		}
+	}
 }

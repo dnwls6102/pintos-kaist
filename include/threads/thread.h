@@ -98,6 +98,15 @@ struct thread {
 	//sleep_list에서 wake up할 때 필요한 시간 변수 wakeup_tick
 	int64_t wakeup_tick;
 
+	//락을 보유했을 때, 우선순위 양보를 (나에게)해줄 쓰레드들의 리스트 donations
+	struct list donations;
+
+	//어떤 락을 기다리는지를 저장하는 변수 wait_on_lock
+	struct lock * wait_on_lock;
+
+	//우선순위 전이가 일어난 후, 다시 원상태의 우선순위로 복구하기 위해 별도로 저장하는 original_priority
+	int original_priority;
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
