@@ -448,6 +448,7 @@ new_priority로 설정하면 안되고, donation의 head로 우선순위를 설�
 void
 thread_set_priority (int new_priority) {
 	struct thread *current_t = thread_current();
+	int old_priority = current_t -> priority;
 
 	//현재 스레드의 donations에 스레드가 남아있다면
 	if (!list_empty(&current_t->donations))
@@ -560,6 +561,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	strlcpy (t->name, name, sizeof t->name);
 	t->tf.rsp = (uint64_t) t + PGSIZE - sizeof (void *);
 	t->priority = priority;
+	//assertion `thread_get_priority () == PRI_DEFAULT' failed.
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = 0; //wakeup_tick 초기화
 	list_init(&(t -> donations));//우선순위 기부자들이 들어간 리스트 donations 초기화
@@ -760,7 +762,7 @@ preemption()
 	//원본 구조체 복원
 	if (!list_empty(&ready_list))
 	{
-		struct thread * ready_first_t = list_front(&ready_list);
+		struct thread * ready_first_t = list_entry(list_front(&ready_list), struct thread, elem);
 		//만약 현재 실행되는 쓰레드의 우선순위보다 
 		//ready list에서 가장 먼저 실행되어야 할 스레드의 우선순위가 더 높다면
 		if (thread_current() -> priority < ready_first_t -> priority)
