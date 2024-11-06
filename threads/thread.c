@@ -563,7 +563,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->magic = THREAD_MAGIC;
 	t->wakeup_tick = 0; //wakeup_tick 초기화
 	list_init(&(t -> donations));//우선순위 기부자들이 들어간 리스트 donations 초기화
-	lock_init(t -> wait_on_lock);//내가 어떤 (임계 영역에 대한)락을 기다리고 있는지를 저장하는 lock 포인터 wait_on_lock 초기화
+	//내가 어떤 (임계 영역에 대한)락을 기다리고 있는지를 저장하는 lock 포인터 wait_on_lock 초기화
+	t -> wait_on_lock = NULL;
+	//lock_init(t -> wait_on_lock);
 	t->original_priority = -1; //우선순위 기부를 받을 때, 복구할 원본 우선순위를 저장할 변수 original_priority
 }
 
