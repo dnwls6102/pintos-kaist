@@ -277,8 +277,39 @@ lock_release (struct lock *lock) {
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
+	struct thread* old_holder = lock -> holder;
+	struct thread* temp_thread;
+	struct list_elem * temp;
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
+
+	temp = list_front(&old_holder -> donations);
+
+	//기부받았던 스레드의 삭제
+	while (1)
+	{
+		temp_thread = list_entry(temp, struct thread, elem);
+		if (lock == temp_thread -> wait_on_lock && old_holder -> priority == temp_thread -> priority)
+		{
+			list_remove(temp);
+			break;
+		}
+		else
+			temp = temp -> next;
+	}
+
+	old_holder -> priority = old_holder -> original_priority;
+	old_holder -> original_priority = -1;
+
+	if(!list_empty(&old_holder -> donations))
+	{
+		//현재 스레드에 우선순위를 기부받을(경쟁 조건에 의해 )
+		struct thread *donation_top = list_entry(list_front(&old_holder->donations), struct thread, elem);
+		//만약 donation_top의 우선순위가 새로 부여받을 우선순위보다 높다면
+		if (donation_top -> priority > old_holder -> priority)
+			old_holder -> priority = donation_top -> priority; //donation_top의 우선순위로 현재 스레드의 우선순위를 변경
+	}
+	
 }
 
 /* Returns true if the current thread holds LOCK, false
