@@ -70,7 +70,7 @@ static void do_schedule(int status);
 static void schedule (void);
 static tid_t allocate_tid (void);
 
-static void preemption();
+void preemption();
 
 /* Returns true if T appears to point to a valid thread. */
 #define is_thread(t) ((t) != NULL && (t)->magic == THREAD_MAGIC)
@@ -577,7 +577,7 @@ init_thread (struct thread *t, const char *name, int priority) {
 	//내가 어떤 (임계 영역에 대한)락을 기다리고 있는지를 저장하는 lock 포인터 wait_on_lock 초기화
 	t -> wait_on_lock = NULL;
 	//lock_init(t -> wait_on_lock);
-	t->original_priority = -1; //우선순위 기부를 받을 때, 복구할 원본 우선순위를 저장할 변수 original_priority
+	t->original_priority = priority; //우선순위 기부를 받을 때, 복구할 원본 우선순위를 저장할 변수 original_priority
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
@@ -764,7 +764,7 @@ allocate_tid (void) {
 혹은 새로운 스레드를 생성했을 때
 현재 실행되어야 할 스레드가 변경되어야 할 수 있다
 */
-static void
+void
 preemption()
 {	
 	//ready list에서 가장 우선순위가 빠른 원소를 참조해

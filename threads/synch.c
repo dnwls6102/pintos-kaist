@@ -138,19 +138,27 @@ sema_up (struct semaphore *sema) {
 	#endif
 	#ifdef TEST
 	enum intr_level old_level;
+	struct thread *t;
 
 	ASSERT (sema != NULL);
 
 	old_level = intr_disable ();
+	//sema의 waiters 리스트가 비어있지 않다면(비어있으면 락을 넘겨줄 스레드가 없다는 의미므로 무시해도 됨)
 	if (!list_empty (&sema->waiters))
 	{
-		//waiters에서 원소를 빼주기 전에 sort : 우선순위 전이가 일어났을수도
-		list_sort(&sema->waiters, priority_more, NULL);
-		thread_unblock (list_entry (list_pop_front (&sema->waiters),
-					struct thread, elem));
+		//waiters의 가장 최선두(=우선순위가 가장 높은) 스레드 뽑아내기
+		t = list_entry (list_pop_front (&sema->waiters),struct thread, elem);
+		//unblock하여 ready_list로 보내기
+		thread_unblock (t);
 	}
+	//semaphore의 값 올려주기
 	sema->value++;
+	//인터럽트 복원
 	intr_set_level (old_level);
+
+	//선점 검사
+	preemption();
+
 	#endif
 }
 

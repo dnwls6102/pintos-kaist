@@ -160,4 +160,6 @@ bool wake_up_tick_less(const struct list_elem *a, const struct list_elem *b, voi
 
 bool priority_more(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
+void preemption(void);
+
 #endif /* threads/thread.h */
