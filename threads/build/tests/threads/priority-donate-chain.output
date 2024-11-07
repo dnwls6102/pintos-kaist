@@ -1,0 +1,14 @@
+Kernel command line: -q run priority-donate-chain
+0 ~ 9fc00 1
+100000 ~ 13e0000 1
+Pintos booting with: 
+	base_mem: 0x0 ~ 0x9fc00 (Usable: 639 kB)
+	ext_mem: 0x100000 ~ 0x13e0000 (Usable: 19,328 kB)
+Calibrating timer...  314,163,200 loops/s.
+Boot complete.
+Executing 'priority-donate-chain':
+(priority-donate-chain) begin
+(priority-donate-chain) main got lock.
+(priority-donate-chain) Interrupt 0x0e (#PF Page-Fault Exception) at rip=800420a301
+Interrupt 0x0e (#PF Page-Fault Exception) at rip=800420a301
+Interrupt 0x0e (#PF Page-Fault Exception) at rip=800420a3

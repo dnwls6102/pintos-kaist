@@ -235,7 +235,10 @@ thread_create (const char *name, int priority,
 	thread_unblock (t);
 
 	//새로 만든 스레드의 우선순위가 현재 스레드의 우선순위보다 높다면...
-	preemption();
+	//preemption();
+
+	if (thread_current() -> priority < t -> priority)
+		thread_yield();
 
 	return tid;
 }
@@ -448,7 +451,6 @@ new_priority로 설정하면 안되고, donation의 head로 우선순위를 설�
 void
 thread_set_priority (int new_priority) {
 	struct thread *current_t = thread_current();
-	int old_priority = current_t -> priority;
 
 	//현재 스레드의 donations에 스레드가 남아있다면
 	if (!list_empty(&current_t->donations))
@@ -463,8 +465,15 @@ thread_set_priority (int new_priority) {
 	//현재 스레드의 우선순위를 변경
 	current_t -> priority = new_priority;
 
+	if (priority_more(list_begin(&ready_list), &current_t -> elem, NULL) && !list_empty(&ready_list))
+	{
+		thread_yield();
+	}	
+
+
 	//선점 검사
-	preemption();
+	//if (old_priority > new_priority)
+		//preemption();
 }
 
 /* Returns the current thread's priority. */
