@@ -31,6 +31,7 @@
 #include <string.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
+#define TEST
 
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
@@ -59,6 +60,21 @@ sema_init (struct semaphore *sema, unsigned value) {
    sema_down function. */
 void
 sema_down (struct semaphore *sema) {
+	#ifndef TEST
+	enum intr_level old_level;
+
+	ASSERT (sema != NULL);
+	ASSERT (!intr_context ());
+
+	old_level = intr_disable ();
+	while (sema->value == 0) {
+		list_push_back (&sema->waiters, &thread_current ()->elem);
+		thread_block ();
+	}
+	sema->value--;
+	intr_set_level (old_level);
+	#endif
+	#ifdef TEST
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
@@ -74,6 +90,7 @@ sema_down (struct semaphore *sema) {
 	}
 	sema->value--;
 	intr_set_level (old_level);
+	#endif
 }
 
 /* Down or "P" operation on a semaphore, but only if the
@@ -107,6 +124,19 @@ sema_try_down (struct semaphore *sema) {
    This function may be called from an interrupt handler. */
 void
 sema_up (struct semaphore *sema) {
+	#ifndef TEST
+	enum intr_level old_level;
+
+	ASSERT (sema != NULL);
+
+	old_level = intr_disable ();
+	if (!list_empty (&sema->waiters))
+		thread_unblock (list_entry (list_pop_front (&sema->waiters),
+					struct thread, elem));
+	sema->value++;
+	intr_set_level (old_level);
+	#endif
+	#ifdef TEST
 	enum intr_level old_level;
 
 	ASSERT (sema != NULL);
@@ -121,6 +151,7 @@ sema_up (struct semaphore *sema) {
 	}
 	sema->value++;
 	intr_set_level (old_level);
+	#endif
 }
 
 static void sema_test_helper (void *sema_);
@@ -191,6 +222,15 @@ lock_init (struct lock *lock) {
    we need to sleep. */
 void
 lock_acquire (struct lock *lock) {
+	#ifdef TEST
+	ASSERT (lock != NULL);
+	ASSERT (!intr_context ());
+	ASSERT (!lock_held_by_current_thread (lock));
+
+	sema_down (&lock->semaphore);
+	lock->holder = thread_current ();
+	#endif
+	#ifndef TEST
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
@@ -245,6 +285,8 @@ lock_acquire (struct lock *lock) {
 	}
 	sema_down (&lock->semaphore);
 	lock->holder = current_t;
+	#endif
+
 }
 
 /* Tries to acquires LOCK and returns true if successful or false
@@ -274,6 +316,14 @@ lock_try_acquire (struct lock *lock) {
    handler. */
 void
 lock_release (struct lock *lock) {
+	#ifdef TEST
+	ASSERT (lock != NULL);
+	ASSERT (lock_held_by_current_thread (lock));
+
+	lock->holder = NULL;
+	sema_up (&lock->semaphore);
+	#endif
+	#ifndef TEST
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
 
@@ -308,7 +358,7 @@ lock_release (struct lock *lock) {
 		if (donation_top -> priority > old_holder -> priority)
 			old_holder -> priority = donation_top -> priority; //donation_top의 우선순위로 현재 스레드의 우선순위를 변경
 	}
-	
+	#endif
 }
 
 /* Returns true if the current thread holds LOCK, false
@@ -359,6 +409,21 @@ cond_init (struct condition *cond) {
    we need to sleep. */
 void
 cond_wait (struct condition *cond, struct lock *lock) {
+	#ifndef TEST
+	struct semaphore_elem waiter;
+
+	ASSERT (cond != NULL);
+	ASSERT (lock != NULL);
+	ASSERT (!intr_context ());
+	ASSERT (lock_held_by_current_thread (lock));
+
+	sema_init (&waiter.semaphore, 0);
+	list_push_back (&cond->waiters, &waiter.elem);
+	lock_release (lock);
+	sema_down (&waiter.semaphore);
+	lock_acquire (lock);
+	#endif
+	#ifdef TEST
 	struct semaphore_elem waiter;
 
 	ASSERT (cond != NULL);
@@ -372,6 +437,7 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	lock_release (lock);
 	sema_down (&waiter.semaphore);
 	lock_acquire (lock);
+	#endif
 }
 
 /* If any threads are waiting on COND (protected by LOCK), then
@@ -383,6 +449,17 @@ cond_wait (struct condition *cond, struct lock *lock) {
    interrupt handler. */
 void
 cond_signal (struct condition *cond, struct lock *lock UNUSED) {
+	#ifndef TEST
+	ASSERT (cond != NULL);
+	ASSERT (lock != NULL);
+	ASSERT (!intr_context ());
+	ASSERT (lock_held_by_current_thread (lock));
+
+	if (!list_empty (&cond->waiters))
+		sema_up (&list_entry (list_pop_front (&cond->waiters),
+					struct semaphore_elem, elem)->semaphore);
+	#endif
+	#ifdef TEST
 	ASSERT (cond != NULL);
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
@@ -395,6 +472,7 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 		sema_up (&list_entry (list_pop_front (&cond->waiters),
 					struct semaphore_elem, elem)->semaphore);
 	}
+	#endif
 }
 
 /* Wakes up all threads, if any, waiting on COND (protected by
