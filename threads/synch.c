@@ -235,6 +235,17 @@ lock_acquire (struct lock *lock) {
 	ASSERT (!intr_context ());
 	ASSERT (!lock_held_by_current_thread (lock));
 
+	struct thread * current_t = thread_current();
+	//락을 가지고 있는 스레드가 있다면
+	if (lock -> holder != NULL)
+	{
+		//현재 스레드의 락 요청 주소를 저장
+		current_t -> wait_on_lock = lock;
+		//lock 홀더 스레드의 donations 리스트에 현재 스레드 저장
+		list_insert_ordered(&lock->holder->donations, &current_t -> elem, priority_more, NULL);
+		
+	}
+
 	sema_down (&lock->semaphore);
 	lock->holder = thread_current ();
 	#endif
