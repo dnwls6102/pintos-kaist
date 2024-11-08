@@ -267,7 +267,8 @@ lock_acquire (struct lock *lock) {
 		//현재 스레드의 락 요청 주소를 저장
 		current_t -> wait_on_lock = lock;
 		//lock 홀더 스레드의 donations 리스트에 현재 스레드 저장
-		list_insert_ordered(&lock->holder->donations, &current_t -> elem, priority_more, NULL);
+		//donations에 넣어주는 elem은 별도의 elem을 선언해야 함 <== 왜?
+		list_insert_ordered(&lock->holder->donations, &current_t -> d_elem, priority_more, NULL);
 		//우선순위 기부하기
 		nested_donation();
 	}
@@ -371,7 +372,7 @@ lock_release (struct lock *lock) {
 	{
 		for(struct list_elem* e = list_front(&current_t -> donations); e != list_end(&current_t -> donations);)
 		{
-			struct thread *t = list_entry(e, struct thread, elem);
+			struct thread *t = list_entry(e, struct thread, d_elem);
 			if (t -> wait_on_lock == lock)
 			{
 				e = list_remove(e);
@@ -391,7 +392,7 @@ lock_release (struct lock *lock) {
 	if (!list_empty(&current_t -> donations))
 	{
 		//donations의 가장 앞에서 thread를 받아와
-		struct thread * donation_front = list_entry(list_front(&current_t -> donations), struct thread, elem);
+		struct thread * donation_front = list_entry(list_front(&current_t -> donations), struct thread, d_elem);
 		//해당 스레드의 우선순위 기부받기
 		current_t -> priority = donation_front -> priority;
 	}

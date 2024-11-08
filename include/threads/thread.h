@@ -107,6 +107,8 @@ struct thread {
 	//우선순위 전이가 일어난 후, 다시 원상태의 우선순위로 복구하기 위해 별도로 저장하는 original_priority
 	int original_priority;
 
+	struct list_elem d_elem; // 도네이션 리스트에 삽입되는 리스트 엘리먼트
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
