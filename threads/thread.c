@@ -583,7 +583,8 @@ thread_set_nice (int nice UNUSED) {
 int
 thread_get_nice (void) {
 	/* TODO: Your implementation goes here */
-	return 0;
+	
+	return thread_current() -> nice;
 }
 
 /* Returns 100 times the system load average. */
@@ -600,7 +601,10 @@ thread_get_load_avg (void) {
 int
 thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
-	return 0;
+	enum intr_level old_level = intr_disable();
+	int result = fp_to_int_round(mul_mixed(thread_current() -> recent_cpu, 100));
+	intr_set_level(old_level);
+	return result;
 }
 
 //오류 발생하면 load_avg를 100배 증가시킨 값으로 변경

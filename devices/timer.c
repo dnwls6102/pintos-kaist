@@ -164,7 +164,7 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 			if (ticks % TIMER_FREQ == 0)
 			{
 				//load_avg를 먼저 계산해준 후 recent_cpu계산 ?
-				mlfqs_calculate_load_avg();
+				//mlfqs_calculate_load_avg();
 				for (struct list_elem *e = all_list_front(); e != all_list_end(); )
 				{
 					struct thread * temp = list_entry(e, struct thread, a_elem);
@@ -172,6 +172,7 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 					mlfqs_calculate_recent_cpu(temp);
 					e = list_next(e);
 				}
+				mlfqs_calculate_load_avg();
 			}
 		}
 
