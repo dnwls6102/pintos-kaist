@@ -244,6 +244,14 @@ void wait_on_lock(void) {
    we need to sleep. */
 void 
 lock_acquire(struct lock *lock) {
+	/*MLFQS에서는 시간에 따라 알아서 우선순위가 조정되기에 우선순위 기부가 필요없음. MLFQS인 경우 sema를 활용한 평범한 lock을 사용하게끔 구현*/
+	if (thread_mlfqs)
+	{
+		sema_down(&lock->semaphore);
+		lock->holder = thread_current();
+		return;
+	}
+		
     ASSERT (lock != NULL);
     ASSERT (!intr_context ());
     ASSERT (!lock_held_by_current_thread (lock));
@@ -288,6 +296,14 @@ lock_try_acquire (struct lock *lock) {
    handler. */
 void 
 lock_release(struct lock *lock) {
+	/*MLFQS에서는 시간에 따라 알아서 우선순위가 조정되기에 우선순위 기부가 필요없음. MLFQS인 경우 바로 return시키기*/
+	if (thread_mlfqs)
+	{
+		lock -> holder = NULL;
+		sema_up(&lock->semaphore);
+		return;
+	}
+		
     ASSERT(lock != NULL);
     ASSERT(lock_held_by_current_thread(lock));
 

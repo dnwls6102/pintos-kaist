@@ -102,6 +102,9 @@ struct thread {
     struct list donations;       // 현재 스레드에게 기부된 스레드들의 리스트
     struct list_elem d_elem; // 도네이션 리스트에 삽입되는 리스트 엘리먼트
 
+	int nice; //MLFQS 구현을 위한 nice
+	int recent_cpu; //CPU 사용 시간에 따른 프로세스 조정에 필요한 수치 recent_cpu
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */

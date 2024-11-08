@@ -399,6 +399,11 @@ thread_yield (void) {
 /* Sets the current thread's priority to NEW_PRIORITY. */
 void 
 thread_set_priority(int new_priority) {
+
+	/*MLFQS에서는 사용자가 임의로 프로세스의 우선순위를 조절할 수 없음. MLFQS인 경우 바로 return시키기*/
+	if (thread_mlfqs)
+		return;
+		
     struct thread *cur = thread_current();
     cur->base_priority = new_priority;
 
@@ -524,6 +529,10 @@ init_thread (struct thread *t, const char *name, int priority) {
 	t->base_priority = priority;
 	t->waiting_lock = NULL;
 	list_init(&t->donations);
+
+	/*MLFQS를 위한 nice, recent_cpu 초기화*/
+	t->nice = 0; //nice 기본 수치인 0으로 설정
+	t->recent_cpu = 0; //recent_cpu도 기본 수치 0으로 설정
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
