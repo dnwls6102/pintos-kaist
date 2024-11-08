@@ -136,36 +136,42 @@ timer_print_stats (void) {
 static void 
 timer_interrupt(struct intr_frame *args UNUSED) {
     ticks++;
+	thread_tick(); //4틱이 지나면 다른 프로세스로 전환
 
-	//현재 스레드의 recent_cpu 수치를 1 올려주기
-	thread_current() -> recent_cpu += 1;
-
-	//매 4틱마다, 모든 스레드의 우선순위를 다시 계산해주기
-	if (ticks % 4 == 0)
+	//만약 mlfqs 방식이라면
+	if(thread_mlfqs)
 	{
-		for (struct list_elem *e = all_list_front(); e != all_list_end(); )
-		{
-			struct thread * temp = list_entry(e, struct thread, a_elem);
-			//priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
-			temp -> priority = PRI_MAX - (temp -> recent_cpu / 4) - (temp -> nice * 2);
-		}
-	}
+		//현재 스레드의 recent_cpu 수치를 1 올려주기
+		thread_current() -> recent_cpu += add_mixed(thread_current() -> recent_cpu, 1);
 
-    thread_tick(); //4틱이 지나면 다른 프로세스로 전환
+		//매 4틱마다, 모든 스레드의 우선순위를 다시 계산해주기
+		if (ticks % 4 == 0)
+		{
+			for (struct list_elem *e = all_list_front(); e != all_list_end(); )
+			{
+				struct thread * temp = list_entry(e, struct thread, a_elem);
+				//priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+				mlfqs_calculate_priority(temp);
+			}
+		
 	
-	//매 초마다, 모든 스레드의 recent_cpu 업데이트하기
-	//1초는 몇 틱으로 구성되어 있는지?
-	//timer.h에 TIMER_FREQ 매크로 상수로 선언되어 있음
-	if (ticks % TIMER_FREQ == 0)
-	{
-		for (struct list_elem *e = all_list_front(); e != all_list_end(); )
-		{
-			struct thread * temp = list_entry(e, struct thread, a_elem);
-			//recent_cpu = decay * recent_cpu + nice
-			temp -> recent_cpu = get_decay() * temp -> recent_cpu + temp -> nice;
+			//매 초마다, 모든 스레드의 recent_cpu 업데이트하기
+			//1초는 몇 틱으로 구성되어 있는지?
+			//timer.h에 TIMER_FREQ 매크로 상수로 선언되어 있음
+			if (ticks % TIMER_FREQ == 0)
+			{
+				for (struct list_elem *e = all_list_front(); e != all_list_end(); )
+				{
+					struct thread * temp = list_entry(e, struct thread, a_elem);
+					//recent_cpu = decay * recent_cpu + nice
+					//load_avg를 먼저 계산해준 후 recent_cpu계산 ?
+					mlfqs_calculate_load_avg();
+					mlfqs_calculate_recent_cpu(temp);
+				}
+			}
 		}
-	}
 
+	}
 
     /* 현재 tick이 global_tick 이상이면 슬립 리스트 확인 */
     if (get_global_tick() <= ticks) {

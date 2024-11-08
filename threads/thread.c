@@ -122,6 +122,63 @@ cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNU
     return t_a->priority > t_b->priority;
 }
 
+/*fixed_point 연산 : n은 일반 int, x, y는 fixed_point number, F는 fixed_point number에서의 1*/
+int int_to_fp (int n)
+{
+	return n * F;
+}
+
+int fp_to_int (int x)
+{
+	return x / F;
+}
+
+int fp_to_int_round (int x)
+{
+	if (x >= 0) return (x + F / 2) / F;
+	else return (x - F / 2) / F;
+}
+
+int fp_add (int x, int y)
+{
+	return x + y;
+}
+
+int fp_sub (int x, int y)
+{
+	return x - y;
+}
+
+int add_mixed (int x, int n)
+{
+	return x + n * F;
+}
+
+int sub_mixed (int x, int n)
+{
+	return x - n * F;
+}
+
+int fp_mul (int x, int y)
+{
+	return ((int64_t) x) * y / F;
+}
+
+int mul_mixed (int x, int n)
+{
+	return x * n;
+}
+
+int fp_div (int x, int y)
+{
+	return ((int64_t) x) * F / y;
+}
+
+int div_mixed (int x, int n)
+{
+	return x / n;
+}
+
 void
 thread_init (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
@@ -134,9 +191,6 @@ thread_init (void) {
 		.address = (uint64_t) gdt
 	};
 	lgdt (&gdt_ds);
-
-	//부팅 시 load_avg는 0으로 설정
-	load_avg = 0;
 
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
@@ -176,6 +230,9 @@ thread_start (void) {
 
 	/* Start preemptive thread scheduling. */
 	intr_enable ();
+
+	//부팅 시 load_avg를 0으로 설정
+	load_avg = 0;
 
 	/* Wait for the idle thread to initialize idle_thread. */
 	sema_down (&idle_started);
@@ -447,6 +504,46 @@ thread_get_priority (void) {
 	return thread_current ()->priority;
 }
 
+//ready_threads : 현재 실행하고 있는 스레드 + ready_list에 준비 중인 스레드들의 총합
+//idle 스레드가 실행중인 경우 ready_list에 준비중인 스레드들만 반환
+int get_ready_threads()
+{
+	if (thread_current() == idle_thread)
+		return list_size(&ready_list);
+	else
+		return list_size(&ready_list) + 1;
+}
+
+
+//mlfqs상에서의 우선순위 계산 : priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+void mlfqs_calculate_priority(struct thread * t)
+{
+	//t가 idle 스레드라면 : return
+	if (t == idle_thread)
+		return;
+	t -> priority = fp_to_int(sub_mixed(PRI_MAX, sub_mixed(div_mixed(t -> recent_cpu, 4), t -> nice * 2)));
+}
+
+//mlfqs상에서의 recent_cpu 계산 : decay * recent_cpu + nice
+//decay = (2 * load_avg) / (2 * load_avg + 1)
+void mlfqs_calculate_recent_cpu(struct thread *t)
+{
+	//t가 idle_thread라면 : return
+	if (t == idle_thread)
+		return;
+	t -> recent_cpu = add_mixed(fp_mul(fp_div(mul_mixed(load_avg, 2), add_mixed(mul_mixed(load_avg, 2), 1)),
+	t -> recent_cpu), t -> nice);
+}
+
+//mlfqs상에서의 load_avg 계산 : load_avg = (59/60) * load_avg + (1/60) * ready_threads
+void mlfqs_calculate_load_avg(void)
+{
+	int ready_threads = get_ready_threads();
+
+	load_avg = fp_add(fp_mul(fp_div(int_to_fp(59), int_to_fp(60)), load_avg), 
+	mul_mixed(fp_div(int_to_fp(1), int_to_fp(60)), ready_threads));
+}
+
 /*시스템 상의 모든 스레드들이 들어간 all_list의 맨 앞 원소를 반환하는 함수*/
 struct list_elem* all_list_front()
 {
@@ -458,14 +555,6 @@ struct list_elem* all_list_end()
 {
 	//주의: 원소를 반환하는 것이 아닌 tail을 반환함
 	return list_end(&all_list);
-}
-
-int get_ready_threads()
-{
-	if (list_empty(&ready_list))
-		return 0;
-	else
-		return list_size(&ready_list) - 1; //idle 스레드는 빼줘야함
 }
 
 /* Sets the current thread's nice value to NICE. */
@@ -485,8 +574,8 @@ thread_get_nice (void) {
 int
 thread_get_load_avg (void) {
 	/* TODO: Your implementation goes here */
-	load_avg = (59/60) * load_avg + (1/60) * get_ready_threads();
-	return load_avg * 100;
+	
+	return 0;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */

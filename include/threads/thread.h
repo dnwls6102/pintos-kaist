@@ -28,6 +28,11 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
+/*fixed_point 용 매크로 상수*/
+#define F (1 << 14)
+#define INT_MAX ((1 << 31) - 1)
+#define INT_MIN (-(1 << 31))
+
 /* A kernel thread or user process.
  *
  * Each thread structure is stored in its own 4 kB page.  The
@@ -173,5 +178,23 @@ struct list_elem* all_list_end(void);
 
 int get_ready_threads(void);
 int get_decay(void);
+
+void mlfqs_calculate_priority(struct thread * t);
+void mlfqs_calculate_recent_cpu(struct thread *t);
+void mlfqs_calculate_load_avg(void);
+
+/*fixed_point 연산 : n은 일반 int, x, y는 fixed_point number, F는 fixed_point number에서의 1*/
+int int_to_fp (int n);
+int fp_to_int (int x);
+int fp_to_int_round (int x);
+int fp_add (int x, int y);
+int fp_sub (int x, int y);
+int add_mixed (int x, int n);
+int sub_mixed (int x, int n);
+int fp_mul (int x, int y);
+int mul_mixed (int x, int n);
+int fp_div (int x, int y);
+int div_mixed (int x, int n);
+
 
 #endif /* threads/thread.h */
