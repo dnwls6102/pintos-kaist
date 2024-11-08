@@ -157,7 +157,11 @@ sema_up (struct semaphore *sema) {
 	intr_set_level (old_level);
 
 	//선점 검사
-	preemption();
+	//preemption();
+	// 언블록된 스레드의 우선순위가 현재 스레드보다 높으면 CPU를 양보
+    if (t != NULL && t->priority > thread_current()->priority) {
+        thread_yield();
+    }
 
 	#endif
 }
@@ -228,6 +232,27 @@ lock_init (struct lock *lock) {
    interrupt handler.  This function may be called with
    interrupts disabled, but interrupts will be turned back on if
    we need to sleep. */
+
+void
+nested_donation()
+{
+	struct thread *current_t = thread_current();
+	struct lock *lock = current_t -> wait_on_lock;
+
+	while (lock != NULL && lock -> holder != NULL)
+	{
+		struct thread *holder = lock -> holder;
+		if (holder -> priority < current_t -> priority)
+		{
+			holder -> priority = current_t -> priority;
+
+			//list_sort(&holder->donations, priority_more, NULL);
+		}
+
+		lock = holder -> wait_on_lock;
+	}
+}
+
 void
 lock_acquire (struct lock *lock) {
 	#ifdef TEST
@@ -243,11 +268,13 @@ lock_acquire (struct lock *lock) {
 		current_t -> wait_on_lock = lock;
 		//lock 홀더 스레드의 donations 리스트에 현재 스레드 저장
 		list_insert_ordered(&lock->holder->donations, &current_t -> elem, priority_more, NULL);
-		
+		//우선순위 기부하기
+		nested_donation();
 	}
 
 	sema_down (&lock->semaphore);
-	lock->holder = thread_current ();
+	current_t -> wait_on_lock = NULL;
+	lock->holder = current_t;
 	#endif
 	#ifndef TEST
 	ASSERT (lock != NULL);
@@ -338,6 +365,36 @@ lock_release (struct lock *lock) {
 	#ifdef TEST
 	ASSERT (lock != NULL);
 	ASSERT (lock_held_by_current_thread (lock));
+
+	struct thread* current_t = thread_current();
+	if (!list_empty(&current_t -> donations))
+	{
+		for(struct list_elem* e = list_front(&current_t -> donations); e != list_end(&current_t -> donations);)
+		{
+			struct thread *t = list_entry(e, struct thread, elem);
+			if (t -> wait_on_lock == lock)
+			{
+				e = list_remove(e);
+			}
+			else
+			{
+				e = list_next(e);
+			}
+		}
+	}
+
+
+	//락 양도하기 전에 우선순위 원상 복구
+	current_t -> priority = current_t -> original_priority;
+
+	//현재 스레드의 donations가 비어있지 않다면
+	if (!list_empty(&current_t -> donations))
+	{
+		//donations의 가장 앞에서 thread를 받아와
+		struct thread * donation_front = list_entry(list_front(&current_t -> donations), struct thread, elem);
+		//해당 스레드의 우선순위 기부받기
+		current_t -> priority = donation_front -> priority;
+	}
 
 	lock->holder = NULL;
 	sema_up (&lock->semaphore);
