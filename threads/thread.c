@@ -179,6 +179,12 @@ int div_mixed (int x, int n)
 	return x / n;
 }
 
+/*현재 실행 스레드가 idle 스레드인지를 알려주는 함수*/
+bool is_idle(void)
+{
+	return thread_current() == idle_thread;
+}
+
 void
 thread_init (void) {
 	ASSERT (intr_get_level () == INTR_OFF);
@@ -561,6 +567,16 @@ struct list_elem* all_list_end()
 void
 thread_set_nice (int nice UNUSED) {
 	/* TODO: Your implementation goes here */
+	enum intr_level old_level = intr_disable();
+	thread_current() -> nice = nice;
+	mlfqs_calculate_priority(thread_current());
+	if(!list_empty(&ready_list))
+	{
+		struct thread * t = list_entry(list_front(&ready_list), struct thread, elem);
+		if (thread_current() -> priority < t -> priority)
+			thread_yield();
+	}
+	intr_set_level(old_level);
 }
 
 /* Returns the current thread's nice value. */
@@ -574,8 +590,10 @@ thread_get_nice (void) {
 int
 thread_get_load_avg (void) {
 	/* TODO: Your implementation goes here */
-	
-	return 0;
+	enum intr_level old_level = intr_disable();
+	int result = fp_to_int_round(mul_mixed(load_avg, 100));
+	intr_set_level(old_level);
+	return result;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */

@@ -141,8 +141,10 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 	//만약 mlfqs 방식이라면
 	if(thread_mlfqs)
 	{
-		//현재 스레드의 recent_cpu 수치를 1 올려주기
-		thread_current() -> recent_cpu += add_mixed(thread_current() -> recent_cpu, 1);
+		//만약 현재 스레드가 idle 스레드가 아니면
+		if (!is_idle())
+			//현재 스레드의 recent_cpu 수치를 1 올려주기
+			thread_current() -> recent_cpu += add_mixed(thread_current() -> recent_cpu, 1);
 
 		//매 4틱마다, 모든 스레드의 우선순위를 다시 계산해주기
 		if (ticks % 4 == 0)
@@ -152,6 +154,7 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 				struct thread * temp = list_entry(e, struct thread, a_elem);
 				//priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
 				mlfqs_calculate_priority(temp);
+				e = list_next(e);
 			}
 		
 	
@@ -160,13 +163,14 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 			//timer.h에 TIMER_FREQ 매크로 상수로 선언되어 있음
 			if (ticks % TIMER_FREQ == 0)
 			{
+				//load_avg를 먼저 계산해준 후 recent_cpu계산 ?
+				mlfqs_calculate_load_avg();
 				for (struct list_elem *e = all_list_front(); e != all_list_end(); )
 				{
 					struct thread * temp = list_entry(e, struct thread, a_elem);
 					//recent_cpu = decay * recent_cpu + nice
-					//load_avg를 먼저 계산해준 후 recent_cpu계산 ?
-					mlfqs_calculate_load_avg();
 					mlfqs_calculate_recent_cpu(temp);
+					e = list_next(e);
 				}
 			}
 		}

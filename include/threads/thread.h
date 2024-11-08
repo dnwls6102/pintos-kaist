@@ -196,5 +196,7 @@ int mul_mixed (int x, int n);
 int fp_div (int x, int y);
 int div_mixed (int x, int n);
 
+bool is_idle();
+
 
 #endif /* threads/thread.h */
