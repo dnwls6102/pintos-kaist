@@ -105,6 +105,8 @@ struct thread {
 	int nice; //MLFQS 구현을 위한 nice
 	int recent_cpu; //CPU 사용 시간에 따른 프로세스 조정에 필요한 수치 recent_cpu
 
+	struct list_elem a_elem; //all_list에 삽입해줄 전용 list_elem
+
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
 	uint64_t *pml4;                     /* Page map level 4 */
@@ -165,5 +167,11 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
+
+struct list_elem* all_list_front(void);
+struct list_elem* all_list_end(void);
+
+int get_ready_threads(void);
+int get_decay(void);
 
 #endif /* threads/thread.h */

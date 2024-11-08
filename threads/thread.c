@@ -24,12 +24,20 @@
    Do not modify this value. */
 #define THREAD_BASIC 0xd42df210
 
+//평균 스레드 로드량을 나타내는 load_avg
+static int load_avg;
+
+static int decay;
+
 /* List of processes in THREAD_READY state, that is, processes
    that are ready to run but not actually running. */
 static struct list ready_list;
 
 /* 1. sleep_list 추가하기 */
 static struct list sleep_list;
+
+/*시스템 상의 모든 스레드들이 들어가 있는 all_list*/
+static struct list all_list;
 
 /* 슬립 리스트에서 가장 작은 wake-up tick 값 */
 static int64_t global_tick;
@@ -56,7 +64,7 @@ static long long user_ticks;    /* # of timer ticks in user programs. */
 static unsigned thread_ticks;   /* # of timer ticks since last yield. */
 
 /* If false (default), use round-robin scheduler.
-   If true, use multi-level feedback queue scheduler.
+   If true, use multi-level feedbarrck queue scheduler.
    Controlled by kernel command-line option "-o mlfqs". */
 bool thread_mlfqs;
 
@@ -127,11 +135,15 @@ thread_init (void) {
 	};
 	lgdt (&gdt_ds);
 
+	//부팅 시 load_avg는 0으로 설정
+	load_avg = 0;
+
 	/* Init the globla thread context */
 	lock_init (&tid_lock);
 	list_init (&ready_list);
-  list_init(&sleep_list);
-  global_tick = INT64_MAX;
+  	list_init(&sleep_list);
+	list_init(&all_list);
+  	global_tick = INT64_MAX;
 	list_init (&destruction_req);
 
 	/* Set up a thread structure for the running thread. */
@@ -435,6 +447,27 @@ thread_get_priority (void) {
 	return thread_current ()->priority;
 }
 
+/*시스템 상의 모든 스레드들이 들어간 all_list의 맨 앞 원소를 반환하는 함수*/
+struct list_elem* all_list_front()
+{
+	return list_front(&all_list);
+}
+
+/*시스템 상의 모든 스레드들이 들어간 all_list의 마지막 부분을 반환하는 함수*/
+struct list_elem* all_list_end()
+{
+	//주의: 원소를 반환하는 것이 아닌 tail을 반환함
+	return list_end(&all_list);
+}
+
+int get_ready_threads()
+{
+	if (list_empty(&ready_list))
+		return 0;
+	else
+		return list_size(&ready_list) - 1; //idle 스레드는 빼줘야함
+}
+
 /* Sets the current thread's nice value to NICE. */
 void
 thread_set_nice (int nice UNUSED) {
@@ -452,7 +485,8 @@ thread_get_nice (void) {
 int
 thread_get_load_avg (void) {
 	/* TODO: Your implementation goes here */
-	return 0;
+	load_avg = (59/60) * load_avg + (1/60) * get_ready_threads();
+	return load_avg * 100;
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
@@ -460,6 +494,13 @@ int
 thread_get_recent_cpu (void) {
 	/* TODO: Your implementation goes here */
 	return 0;
+}
+
+//오류 발생하면 load_avg를 100배 증가시킨 값으로 변경
+int get_decay()
+{
+	decay = (2 * load_avg) / (2 * load_avg + 1);
+	return decay;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -533,6 +574,9 @@ init_thread (struct thread *t, const char *name, int priority) {
 	/*MLFQS를 위한 nice, recent_cpu 초기화*/
 	t->nice = 0; //nice 기본 수치인 0으로 설정
 	t->recent_cpu = 0; //recent_cpu도 기본 수치 0으로 설정
+
+	/*all_list에 현재 생성한 스레드 삽입*/
+	list_push_back(&all_list, &t -> a_elem);
 }
 
 /* Chooses and returns the next thread to be scheduled.  Should
