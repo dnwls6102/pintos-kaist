@@ -141,10 +141,12 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 	//만약 mlfqs 방식이라면
 	if(thread_mlfqs)
 	{
-		//만약 현재 스레드가 idle 스레드가 아니면
-		if (!is_idle())
-			//현재 스레드의 recent_cpu 수치를 1 올려주기
-			thread_current() -> recent_cpu += add_mixed(thread_current() -> recent_cpu, 1);
+		// //만약 현재 스레드가 idle 스레드가 아니면
+		// if (!is_idle())
+		// 	//현재 스레드의 recent_cpu 수치를 1 올려주기
+		// 	thread_current() -> recent_cpu += add_mixed(thread_current() -> recent_cpu, 1);
+
+		mlfqs_increment_recent_cpu();
 
 		//매 4틱마다, 모든 스레드의 우선순위를 다시 계산해주기
 		if (ticks % 4 == 0)

@@ -1,6 +1,8 @@
 {
     "files.associations": {
         "*.inc": "c",
-        "timer.h": "c"
+        "timer.h": "c",
+        "tests.h": "c",
+        "debug.h": "c"
     }
 }

@@ -197,6 +197,6 @@ int fp_div (int x, int y);
 int div_mixed (int x, int n);
 
 bool is_idle();
-
+void mlfqs_increment_recent_cpu (void);
 
 #endif /* threads/thread.h */

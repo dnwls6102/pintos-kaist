@@ -522,13 +522,20 @@ int get_ready_threads()
 
 
 //mlfqs상에서의 우선순위 계산 : priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
-void mlfqs_calculate_priority(struct thread * t)
+void
+mlfqs_calculate_priority (struct thread *t)
 {
-	//t가 idle 스레드라면 : return
-	if (t == idle_thread)
-		return;
-	t -> priority = fp_to_int(sub_mixed(PRI_MAX, sub_mixed(div_mixed(t -> recent_cpu, 4), t -> nice * 2)));
+  if (t == idle_thread) 
+    return ;
+  t->priority = fp_to_int (add_mixed (div_mixed (t->recent_cpu, -4), PRI_MAX - t->nice * 2));
 }
+// void mlfqs_calculate_priority(struct thread * t)
+// {
+// 	//t가 idle 스레드라면 : return
+// 	if (t == idle_thread)
+// 		return;
+// 	t -> priority = fp_to_int(sub_mixed(PRI_MAX, sub_mixed(div_mixed(t -> recent_cpu, 4), t -> nice * 2)));
+// }
 
 //mlfqs상에서의 recent_cpu 계산 : decay * recent_cpu + nice
 //decay = (2 * load_avg) / (2 * load_avg + 1)
@@ -605,13 +612,6 @@ thread_get_recent_cpu (void) {
 	int result = fp_to_int_round(mul_mixed(thread_current() -> recent_cpu, 100));
 	intr_set_level(old_level);
 	return result;
-}
-
-//오류 발생하면 load_avg를 100배 증가시킨 값으로 변경
-int get_decay()
-{
-	decay = (2 * load_avg) / (2 * load_avg + 1);
-	return decay;
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -866,4 +866,11 @@ allocate_tid (void) {
 	lock_release (&tid_lock);
 
 	return tid;
+}
+
+void
+mlfqs_increment_recent_cpu (void)
+{
+  if (thread_current () != idle_thread)
+    thread_current ()->recent_cpu = add_mixed (thread_current ()->recent_cpu, 1);
 }
