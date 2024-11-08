@@ -15,6 +15,7 @@
 #include "userprog/process.h"
 #endif
 // #define TEST
+#define DONATION
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -450,6 +451,7 @@ new_priority로 설정하면 안되고, donation의 head로 우선순위를 설�
 */
 void
 thread_set_priority (int new_priority) {
+	#ifndef DONATION
 	struct thread *current_t = thread_current();
 
 	//현재 스레드의 donations에 스레드가 남아있다면
@@ -469,6 +471,42 @@ thread_set_priority (int new_priority) {
 	{
 		thread_yield();
 	}	
+	#endif
+	#ifdef DONATION
+	struct thread *current_t = thread_current();
+	//현재 스레드의 원본 우선순위를 변경(지금 우선순위는 기부받은 것을수도 있으니)
+	current_t -> original_priority = new_priority;
+
+	//만약 기부받은 적이 없거나, 새로 설정한 우선순위가 기부받은 우선순위보다 높다면
+	if (list_empty(&current_t -> donations || new_priority > current_t -> priority))
+	{
+		//현재 스레드의 우선순위도 변경시켜줌
+		current_t -> priority = new_priority;
+	}
+
+	// 기부된 우선순위가 있는 경우 donations 리스트를 다시 정렬 (왜?)
+    if (!list_empty(&current_t->donations)) {
+        list_sort(&current_t->donations, priority_more, NULL);
+    }
+
+	//현재 스레드가 lock을 기다리고 있다면
+	if (current_t -> wait_on_lock != NULL)
+	{
+		struct lock *lock = current_t -> wait_on_lock;
+		//만약 lock을 기다리고 있는 스레드들이 있다면
+		if(!list_empty(&lock -> semaphore.waiters))
+		{
+			//정렬(왜?)
+			list_sort(&lock->semaphore.waiters, priority_more, NULL);
+		}
+	}
+
+	//우선순위가 변경되어 CPU를 양보해야 한다면 : 양보하기
+	//근데 그냥 쌩으로 yield를?
+	thread_yield();
+
+
+	#endif
 
 
 	//선점 검사

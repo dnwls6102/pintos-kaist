@@ -33,6 +33,24 @@
 #include "threads/thread.h"
 #define TEST
 
+static bool
+cmp_sema_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNUSED) {
+    struct semaphore *sema_a = list_entry(a, struct semaphore, elem);
+    struct semaphore *sema_b = list_entry(b, struct semaphore, elem);
+
+    if (list_empty(&sema_a->waiters)) {
+        return false;
+    }
+    if (list_empty(&sema_b->waiters)) {
+        return true;
+    }
+
+    struct thread *t_a = list_entry(list_front(&sema_a->waiters), struct thread, elem);
+    struct thread *t_b = list_entry(list_front(&sema_b->waiters), struct thread, elem);
+
+    return t_a->priority > t_b->priority;
+}
+
 /* Initializes semaphore SEMA to VALUE.  A semaphore is a
    nonnegative integer along with two atomic operators for
    manipulating it:
@@ -159,6 +177,7 @@ sema_up (struct semaphore *sema) {
 	//선점 검사
 	//preemption();
 	// 언블록된 스레드의 우선순위가 현재 스레드보다 높으면 CPU를 양보
+	// 언블록된 스레드보다 더 높은 우선순위의 스레드가 ready_list에서 대기하고 있을 경우는?
     if (t != NULL && t->priority > thread_current()->priority) {
         thread_yield();
     }
@@ -501,18 +520,20 @@ cond_wait (struct condition *cond, struct lock *lock) {
 	lock_acquire (lock);
 	#endif
 	#ifdef TEST
-	struct semaphore_elem waiter;
+	struct semaphore waiter;
 
 	ASSERT (cond != NULL);
 	ASSERT (lock != NULL);
 	ASSERT (!intr_context ());
 	ASSERT (lock_held_by_current_thread (lock));
 
-	sema_init (&waiter.semaphore, 0);
+	sema_init (&waiter, 0);
+	enum intr_level old_level = intr_disable(); //인터럽트 비활성화
 	//condition variable의 wait_list의 맨 앞에 우선순위가 가장 높은 스레드가 들어가게끔
 	list_insert_ordered (&cond->waiters, &waiter.elem, priority_more, NULL);
+	intr_set_level(old_level); //인터럽트 복원
 	lock_release (lock);
-	sema_down (&waiter.semaphore);
+	sema_down (&waiter);
 	lock_acquire (lock);
 	#endif
 }
@@ -544,10 +565,12 @@ cond_signal (struct condition *cond, struct lock *lock UNUSED) {
 
 	if (!list_empty (&cond->waiters))
 	{
+		enum intr_level old_level = intr_disable();//인터럽트 추가는 지양해야 하는 것 아닌지?
 		//cond_signal에 sort를 추가 : 우선순위 전이가 일어났을수도 있으니까
-		list_sort(&cond->waiters, priority_more, NULL);
-		sema_up (&list_entry (list_pop_front (&cond->waiters),
-					struct semaphore_elem, elem)->semaphore);
+		list_sort(&cond->waiters, cmp_sema_priority, NULL);
+		sema_up (list_entry (list_pop_front (&cond->waiters),
+					struct semaphore, elem));
+		intr_set_level(old_level);
 	}
 	#endif
 }
