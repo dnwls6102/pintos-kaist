@@ -45,4 +45,4 @@ void cond_broadcast (struct condition *, struct lock *);
  * reference guide for more information.*/
 #define barrier() asm volatile ("" : : : "memory")
 
-#endif /* threads/synch.h */
+#endif /* threads/synch.h */  
