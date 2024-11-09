@@ -28,10 +28,10 @@ typedef int tid_t;
 #define PRI_DEFAULT 31                  /* Default priority. */
 #define PRI_MAX 63                      /* Highest priority. */
 
-/*fixed_point 용 매크로 상수*/
-#define F (1 << 14)
-#define INT_MAX ((1 << 31) - 1)
-#define INT_MIN (-(1 << 31))
+/** project1-Advanced Scheduler */
+#define NICE_DEFAULT 0
+#define RECENT_CPU_DEFAULT 0
+#define LOAD_AVG_DEFAULT 0
 
 /* A kernel thread or user process.
  *
@@ -96,21 +96,21 @@ struct thread {
 	enum thread_status status;          /* Thread state. */
 	char name[16];                      /* Name (for debugging purposes). */
 	int priority;                       /* Priority. */
-	int64_t wakeup_tick;
+	int64_t wakeup_tick;				/** project1-Alarm Clock */
 
 	/* Shared between thread.c and synch.c. */
 	struct list_elem elem;              /* List element. */
 
-    /* 우선순위 도네이션을 위한 추가 필드들 */
-    int base_priority;           // 스레드의 기본 우선순위 (기부받은 우선순위가 없을 때의 우선순위)
-    struct lock *waiting_lock;   // 현재 스레드가 대기 중인 락
-    struct list donations;       // 현재 스레드에게 기부된 스레드들의 리스트
-    struct list_elem d_elem; // 도네이션 리스트에 삽입되는 리스트 엘리먼트
+	/** project1-Priority Inversion Problem */
+	int original_priority;
+    struct lock *wait_lock;
+    struct list donations;
+    struct list_elem donation_elem;
 
-	int nice; //MLFQS 구현을 위한 nice
-	int recent_cpu; //CPU 사용 시간에 따른 프로세스 조정에 필요한 수치 recent_cpu
-
-	struct list_elem a_elem; //all_list에 삽입해줄 전용 list_elem
+	/** project1-Advanced Scheduler */
+	int niceness;
+	int recent_cpu;
+	struct list_elem all_elem;
 
 #ifdef USERPROG
 	/* Owned by userprog/process.c. */
@@ -131,18 +131,28 @@ struct thread {
    Controlled by kernel command-line option "-o mlfqs". */
 extern bool thread_mlfqs;
 
-/* thread.h */
+/** project1-Alarm Clock */
+void thread_sleep (int64_t ticks);
+void thread_awake (int64_t ticks);
+void update_next_tick_to_awake (int64_t ticks);
+int64_t get_next_tick_to_awake (void);
 
-/* ... 기존 코드 ... */
+/** project1-Priority Scheduling */
+void test_max_priority(void);
+bool cmp_priority (const struct list_elem *a, const struct list_elem *b, void *aux UNUSED);
 
-/* 새로운 필드 추가: 스레드의 wakeup tick 값 */
-int64_t wakeup_tick;
+/** project1-Priority Inversion Problem */
+void donate_priority(void);
+void remove_with_lock(struct lock *lock);
+void refresh_priority(void);
 
-/* 외부에서 접근 가능한 함수 프로토타입 선언 */
-void thread_sleep(int64_t ticks);
-void thread_wake(int64_t current_ticks);
-void update_global_tick(int64_t ticks);
-int64_t get_global_tick(void);
+/** project1-Advanced Scheduler */
+void mlfqs_priority(struct thread *t);
+void mlfqs_recent_cpu(struct thread *t);
+void mlfqs_load_avg(void);
+void mlfqs_increment(void);
+void mlfqs_recalc_recent_cpu(void);
+void mlfqs_recalc_priority(void);
 
 void thread_init (void);
 void thread_start (void);
@@ -151,7 +161,7 @@ void thread_tick (void);
 void thread_print_stats (void);
 
 typedef void thread_func (void *aux);
-tid_t thread_create (const char *name, int priority, thread_func *function, void *aux);
+tid_t thread_create (const char *name, int priority, thread_func *, void *);
 
 void thread_block (void);
 void thread_unblock (struct thread *);
@@ -172,31 +182,5 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 void do_iret (struct intr_frame *tf);
-
-struct list_elem* all_list_front(void);
-struct list_elem* all_list_end(void);
-
-int get_ready_threads(void);
-int get_decay(void);
-
-void mlfqs_calculate_priority(struct thread * t);
-void mlfqs_calculate_recent_cpu(struct thread *t);
-void mlfqs_calculate_load_avg(void);
-
-/*fixed_point 연산 : n은 일반 int, x, y는 fixed_point number, F는 fixed_point number에서의 1*/
-int int_to_fp (int n);
-int fp_to_int (int x);
-int fp_to_int_round (int x);
-int fp_add (int x, int y);
-int fp_sub (int x, int y);
-int add_mixed (int x, int n);
-int sub_mixed (int x, int n);
-int fp_mul (int x, int y);
-int mul_mixed (int x, int n);
-int fp_div (int x, int y);
-int div_mixed (int x, int n);
-
-bool is_idle();
-void mlfqs_increment_recent_cpu (void);
 
 #endif /* threads/thread.h */

@@ -70,7 +70,6 @@ timer_calibrate (void) {
 	printf ("%'"PRIu64" loops/s.\n", (uint64_t) loops_per_tick * TIMER_FREQ);
 }
 
-
 /* Returns the number of timer ticks since the OS booted. */
 int64_t
 timer_ticks (void) {
@@ -89,24 +88,16 @@ timer_elapsed (int64_t then) {
 }
 
 /* Suspends execution for approximately TICKS timer ticks. */
-void 
-timer_sleep(int64_t ticks) {
-    if (ticks <= 0) {
-        return;
-    }
+void
+timer_sleep (int64_t ticks) {
+	int64_t start = timer_ticks ();
 
-    int64_t start = timer_ticks();
-    enum intr_level old_level = intr_disable();  // 인터럽트 비활성화
-
-    /* 현재 tick에 대기할 tick을 더하여 wake-up tick 계산 */
-    int64_t wakeup_tick = start + ticks;
-
-    /* 스레드를 슬립 상태로 전환 */
-    thread_sleep(wakeup_tick);
-
-    intr_set_level(old_level);  // 인터럽트 복원
+	ASSERT (intr_get_level () == INTR_ON);
+	/** project1-Alarm Clock 
+	while (timer_elapsed (start) < ticks)
+		thread_yield (); */
+	thread_sleep (start + ticks);
 }
-
 
 /* Suspends execution for approximately MS milliseconds. */
 void
@@ -133,55 +124,30 @@ timer_print_stats (void) {
 }
 
 /* Timer interrupt handler. */
-static void 
-timer_interrupt(struct intr_frame *args UNUSED) {
-    ticks++;
-	thread_tick(); //4틱이 지나면 다른 프로세스로 전환
+static void
+timer_interrupt (struct intr_frame *args UNUSED) {
+	ticks++;
+	thread_tick ();
 
-	//만약 mlfqs 방식이라면
-	if(thread_mlfqs)
-	{
-		//만약 현재 스레드가 idle 스레드가 아니면
-		//현재 스레드의 recent_cpu 수치를 1 올려주기
-		if (!is_idle())
-			thread_current() -> recent_cpu = add_mixed(thread_current() -> recent_cpu, 1);
+	/** project1-Advanced Scheduler */	
+    if (thread_mlfqs) {
+        mlfqs_increment();
 
-		//매 4틱마다, 모든 스레드의 우선순위를 다시 계산해주기
-		if (ticks % 4 == 0)
-		{
-			for (struct list_elem *e = all_list_front(); e != all_list_end(); )
-			{
-				struct thread * temp = list_entry(e, struct thread, a_elem);
-				//priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
-				mlfqs_calculate_priority(temp);
-				e = list_next(e);
-			}
-		
-	
-			//매 초마다, 모든 스레드의 recent_cpu 업데이트하기
-			//1초는 몇 틱으로 구성되어 있는지?
-			//timer.h에 TIMER_FREQ 매크로 상수로 선언되어 있음
-			if (ticks % TIMER_FREQ == 0)
-			{
-				//load_avg를 먼저 계산해준 후 recent_cpu계산 ?
-				//mlfqs_calculate_load_avg();
-				for (struct list_elem *e = all_list_front(); e != all_list_end(); )
-				{
-					struct thread * temp = list_entry(e, struct thread, a_elem);
-					//recent_cpu = decay * recent_cpu + nice
-					mlfqs_calculate_recent_cpu(temp);
-					e = list_next(e);
-				}
-				mlfqs_calculate_load_avg();
-			}
-		}
+        if (!(ticks % 4)) {
+            mlfqs_recalc_priority();
 
-	}
-
-    /* 현재 tick이 global_tick 이상이면 슬립 리스트 확인 */
-    if (get_global_tick() <= ticks) {
-        thread_wake(ticks);
+            if (!(ticks % TIMER_FREQ)) {
+                mlfqs_load_avg();
+                mlfqs_recalc_recent_cpu();
+            }
+        }
     }
+
+	/** project1-Alarm Clock */
+	if (get_next_tick_to_awake() <= ticks)
+	{
+	thread_awake(ticks);
+	}
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
