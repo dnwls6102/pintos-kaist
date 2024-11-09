@@ -412,6 +412,14 @@ thread_exit (void) {
 void
 thread_sleep(int64_t wakeup_tick) {
     struct thread *cur = thread_current();
+	//만약 현재 스레드가 idle 스레드라면
+	if(cur == idle_thread)
+	{	
+		//자면안됨
+		ASSERT(0);
+		return;
+	}
+
     enum intr_level old_level;
 
     old_level = intr_disable();  // 인터럽트 비활성화
@@ -583,6 +591,7 @@ thread_set_nice (int nice UNUSED) {
 		if (thread_current() -> priority < t -> priority)
 			thread_yield();
 	}
+	debug_backtrace();
 	intr_set_level(old_level);
 }
 
