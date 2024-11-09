@@ -198,5 +198,7 @@ int div_mixed (int x, int n);
 
 bool is_idle();
 void mlfqs_increment_recent_cpu (void);
+void mlfqs_recalculate_priority();
+void mlfqs_recalculate_recent_cpu();
 
 #endif /* threads/thread.h */

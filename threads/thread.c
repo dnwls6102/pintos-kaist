@@ -14,7 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
-#define DEBUG_MLFQS
+//#define DEBUG_MLFQS
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -122,6 +122,23 @@ cmp_priority(const struct list_elem *a, const struct list_elem *b, void *aux UNU
     struct thread *t_b = list_entry(b, struct thread, elem);
     return t_a->priority > t_b->priority;
 }
+
+#ifdef DEBUG_MLFQS
+/** project1-Alarm Clock */
+void 
+update_next_tick_to_awake (int64_t ticks) 
+{
+	// find smallest tick
+   	global_tick = (global_tick > ticks) ? ticks : global_tick;
+}
+
+/** project1-Alarm Clock */
+int64_t
+get_next_tick_to_awake(void)
+{
+	return global_tick;
+}
+#endif
 
 /*fixed_point 연산 : n은 일반 int, x, y는 fixed_point number, F는 fixed_point number에서의 1*/
 int int_to_fp (int n)
@@ -406,12 +423,15 @@ thread_exit (void) {
 	/* Just set our status to dying and schedule another process.
 	   We will be destroyed during the call to schedule_tail(). */
 	intr_disable ();
+	/*all_list에 넣어줬으니 삭제해주는 작업도 반드시 필요.*/
+	list_remove(&thread_current() -> a_elem);
 	do_schedule (THREAD_DYING);
 	NOT_REACHED ();
 }
 
 void
 thread_sleep(int64_t wakeup_tick) {
+	#ifndef DEBUG_MLFQS
     struct thread *cur = thread_current();
 	//만약 현재 스레드가 idle 스레드라면
 	if(cur == idle_thread)
@@ -429,39 +449,48 @@ thread_sleep(int64_t wakeup_tick) {
 
     /* 슬립 큐에 시간순으로 정렬하여 삽입 */
     list_insert_ordered(&sleep_list, &cur->elem, wakeup_tick_less, NULL);
-    
-	#ifdef DEBUG_MLFQS_LIST
-		intr_set_level(old_level);
-		printf("Printed if list_insert_ordered worked well\n");
-		old_level = intr_disable();
-	#endif
 
 	/* 글로벌 tick 업데이트 */
     if (global_tick > wakeup_tick) {
         global_tick = wakeup_tick;
     }
 
-	#ifdef DEBUG_MLFQS
-		intr_set_level(old_level);
-		printf("Thread %d going to be blocked\n", cur -> tid);
-		old_level = intr_disable();
-	#endif
-
     thread_block();  // 스레드를 블록 상태로 전환
-	#ifdef DEBUG_MLFQS
-		intr_set_level(old_level);
-		printf("Printed if thread_block() worked well");
-		old_level = intr_disable();
-	#endif
+
     intr_set_level(old_level); 
+	#endif
+	#ifdef DEBUG_MLFQS
+	struct thread *this;
+    this = thread_current();
+
+    if (this == idle_thread) // idle -> stop
+	{  
+        ASSERT(0);
+    } else 
+	{
+        enum intr_level old_level;
+        old_level = intr_disable();  // pause interrupt
+
+        update_next_tick_to_awake(this->wakeup_tick = wakeup_tick);  // update awake ticks
+
+        list_push_back(&sleep_list, &this->elem);  // push to sleep_list
+
+        thread_block();  // block this thread
+
+        intr_set_level(old_level);  // continue interrupt
+    }
+	#endif
 }
 
 void 
 thread_wake(int64_t current_ticks) {
+	#ifndef DEBUG_MLFQS
     struct list_elem *e;
 
     /* global_tick 초기화 */
     global_tick = INT64_MAX;
+
+	enum intr_level old_level = intr_disable();
 
     /* 슬립 리스트에서 깨워야 할 스레드를 확인 */
     while (!list_empty(&sleep_list)) {
@@ -470,6 +499,7 @@ thread_wake(int64_t current_ticks) {
         if (t->wakeup_tick <= current_ticks) {
             /* 깨울 시간이라면 스레드를 깨움 */
             list_pop_front(&sleep_list);
+			ASSERT(t != NULL);
             thread_unblock(t);
         } else {
             /* 슬립 리스트가 정렬되어 있으므로 더 이상 확인할 필요가 없음*/
@@ -477,6 +507,29 @@ thread_wake(int64_t current_ticks) {
             break;
         }
     }
+	intr_set_level(old_level);
+	#endif
+	#ifdef DEBUG_MLFQS
+	global_tick = INT64_MAX;
+
+    struct list_elem *sleeping;
+    sleeping = list_begin(&sleep_list);  // take sleeping thread
+
+    while (sleeping != list_end(&sleep_list)) {  // for all sleeping threads
+        struct thread *th = list_entry(sleeping, struct thread, elem);
+
+        if (wakeup_tick >= th->wakeup_tick) 
+		{
+            sleeping = list_remove(&th->elem);  // delete thread
+            thread_unblock(th);                 // unblock thread
+        } 
+		else 
+		{
+            sleeping = list_next(sleeping);              // move to next sleeping thread
+            update_next_tick_to_awake(th->wakeup_tick);  // update wakeup_tick
+        }
+    }
+	#endif
 }
 
 
@@ -583,6 +636,28 @@ void mlfqs_calculate_load_avg(void)
 	mul_mixed(fp_div(int_to_fp(1), int_to_fp(60)), ready_threads));
 }
 
+void mlfqs_recalculate_priority(void)
+{
+	struct list_elem* e;
+	struct thread *temp;
+	for (e = list_front(&all_list); e != list_end(&all_list); e = list_next(e))
+	{
+		temp = list_entry(e, struct thread, a_elem);
+		mlfqs_calculate_priority(temp);
+	}
+}
+
+void mlfqs_recalculate_recent_cpu()
+{
+	struct list_elem* e;
+	struct thread *temp;
+	for (e = list_front(&all_list); e != list_end(&all_list); e = list_next(e))
+	{
+		temp = list_entry(e, struct thread, a_elem);
+		mlfqs_calculate_recent_cpu(temp);
+	}
+}
+
 /*시스템 상의 모든 스레드들이 들어간 all_list의 맨 앞 원소를 반환하는 함수*/
 struct list_elem* all_list_front()
 {
@@ -609,7 +684,6 @@ thread_set_nice (int nice UNUSED) {
 		if (thread_current() -> priority < t -> priority)
 			thread_yield();
 	}
-	debug_backtrace();
 	intr_set_level(old_level);
 }
 

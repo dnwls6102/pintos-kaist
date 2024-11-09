@@ -17,6 +17,8 @@
 #error TIMER_FREQ <= 1000 recommended
 #endif
 
+// #define DEBUG_MLFQS
+
 /* Number of timer ticks since OS booted. */
 static int64_t ticks;
 
@@ -91,6 +93,7 @@ timer_elapsed (int64_t then) {
 /* Suspends execution for approximately TICKS timer ticks. */
 void 
 timer_sleep(int64_t ticks) {
+	#ifndef DEBUG_MLFQS
     if (ticks <= 0) {
         return;
     }
@@ -105,6 +108,16 @@ timer_sleep(int64_t ticks) {
     thread_sleep(wakeup_tick);
 
     intr_set_level(old_level);  // 인터럽트 복원
+	#endif
+	#ifdef DEBUG_MLFQS
+	int64_t start = timer_ticks ();
+
+	ASSERT (intr_get_level () == INTR_ON);
+	/** project1-Alarm Clock 
+	while (timer_elapsed (start) < ticks)
+		thread_yield (); */
+	thread_sleep (start + ticks);
+	#endif
 }
 
 
@@ -149,13 +162,13 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 		//매 4틱마다, 모든 스레드의 우선순위를 다시 계산해주기
 		if (ticks % 4 == 0)
 		{
-			for (struct list_elem *e = all_list_front(); e != all_list_end(); )
-			{
-				struct thread * temp = list_entry(e, struct thread, a_elem);
-				//priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
-				mlfqs_calculate_priority(temp);
-				e = list_next(e);
-			}
+			// for (struct list_elem *e = all_list_front(); e != all_list_end(); e = list_next(e))
+			// {
+			// 	struct thread * temp = list_entry(e, struct thread, a_elem);
+			// 	//priority = PRI_MAX - (recent_cpu / 4) - (nice * 2)
+			// 	mlfqs_calculate_priority(temp);
+			// }
+			mlfqs_recalculate_priority();
 		
 	
 			//매 초마다, 모든 스레드의 recent_cpu 업데이트하기
@@ -165,23 +178,32 @@ timer_interrupt(struct intr_frame *args UNUSED) {
 			{
 				//load_avg를 먼저 계산해준 후 recent_cpu계산 ?
 				//mlfqs_calculate_load_avg();
-				for (struct list_elem *e = all_list_front(); e != all_list_end(); )
-				{
-					struct thread * temp = list_entry(e, struct thread, a_elem);
-					//recent_cpu = decay * recent_cpu + nice
-					mlfqs_calculate_recent_cpu(temp);
-					e = list_next(e);
-				}
+				// for (struct list_elem *e = all_list_front(); e != all_list_end(); )
+				// {
+				// 	struct thread * temp = list_entry(e, struct thread, a_elem);
+				// 	//recent_cpu = decay * recent_cpu + nice
+				// 	mlfqs_calculate_recent_cpu(temp);
+				// 	e = list_next(e);
+				// }
+				mlfqs_recalculate_recent_cpu();
 				mlfqs_calculate_load_avg();
 			}
 		}
 
 	}
 
+	#ifndef DEBUG_MLFQS
     /* 현재 tick이 global_tick 이상이면 슬립 리스트 확인 */
-    if (get_global_tick() <= ticks) {
+   if (get_global_tick() <= ticks) {
         thread_wake(ticks);
-    }
+   }
+   #endif
+   #ifdef DEBUG_MLFQS
+   	if (get_next_tick_to_awake() <= ticks)
+	{
+	thread_wake(ticks);
+	}
+	#endif
 }
 
 /* Returns true if LOOPS iterations waits for more than one timer
