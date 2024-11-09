@@ -14,6 +14,7 @@
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
+#define DEBUG_MLFQS
 
 /* Random value for struct thread's `magic' member.
    Used to detect stack overflow.  See the big comment at the top
@@ -429,12 +430,29 @@ thread_sleep(int64_t wakeup_tick) {
     /* 슬립 큐에 시간순으로 정렬하여 삽입 */
     list_insert_ordered(&sleep_list, &cur->elem, wakeup_tick_less, NULL);
     
+	#ifdef DEBUG_MLFQS_LIST
+		intr_set_level(old_level);
+		printf("Printed if list_insert_ordered worked well\n");
+		old_level = intr_disable();
+	#endif
+
 	/* 글로벌 tick 업데이트 */
     if (global_tick > wakeup_tick) {
         global_tick = wakeup_tick;
     }
 
+	#ifdef DEBUG_MLFQS
+		intr_set_level(old_level);
+		printf("Thread %d going to be blocked\n", cur -> tid);
+		old_level = intr_disable();
+	#endif
+
     thread_block();  // 스레드를 블록 상태로 전환
+	#ifdef DEBUG_MLFQS
+		intr_set_level(old_level);
+		printf("Printed if thread_block() worked well");
+		old_level = intr_disable();
+	#endif
     intr_set_level(old_level); 
 }
 
